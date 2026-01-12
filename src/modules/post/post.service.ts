@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma";
 import { PostWhereInput } from "../../../generated/prisma/models";
 import { date } from "better-auth/*";
 import { auth } from "../../lib/auth";
+import { UserRole } from "../../middlewares/auth";
 
 const createPost = async (
   data: Omit<Post, "id" | "createdAt" | "updatedAt" | "authorId">,
@@ -181,16 +182,15 @@ const getPostById = async (postId: string) => {
 };
 
 const getMyPosts = async (authorId: string) => {
-
-  await prisma .user.findUniqueOrThrow({
-    where:{
-      id:authorId,
-      status :"ACTIVE"
+  await prisma.user.findUniqueOrThrow({
+    where: {
+      id: authorId,
+      status: "ACTIVE",
     },
-    select:{
-      id:true
-    }
-  })
+    select: {
+      id: true,
+    },
+  });
   const result = await prisma.post.findMany({
     where: {
       authorId,
@@ -219,37 +219,127 @@ const getMyPosts = async (authorId: string) => {
   return result;
 };
 
-const updateMyPost = async(postId:string,data:Partial<Post>,authorId:string, isAdmin:boolean)=>{
-  console.log({postId,data,authorId});
+const updateMyPost = async (
+  postId: string,
+  data: Partial<Post>,
+  authorId: string,
+  isAdmin: boolean
+) => {
+  console.log({ postId, data, authorId });
 
   const postData = await prisma.post.findUniqueOrThrow({
-    where:{
-      id:postId
+    where: {
+      id: postId,
     },
-    select:{
-      id:true,
-      authorId:true
-    }
-  })
-  if(!isAdmin && (postData.authorId !== authorId)){
-    throw new Error("You are not the creator of this post !!!")
+    select: {
+      id: true,
+      authorId: true,
+    },
+  });
+  if (!isAdmin && postData.authorId !== authorId) {
+    throw new Error("You are not the creator of this post !!!");
   }
-  if(!isAdmin){
-    delete data.isFeatured
+  if (!isAdmin) {
+    delete data.isFeatured;
   }
 
   const result = await prisma.post.update({
-    where:{
-      id : postData.id
+    where: {
+      id: postData.id,
     },
-    data
-  })
-return result
-}
+    data,
+  });
+  return result;
+};
+
+const deletePost = async (
+  postId: string,
+  authorId: string,
+  isAdmin: boolean
+) => {
+  const postData = await prisma.post.findUniqueOrThrow({
+    where: {
+      id: postId,
+    },
+    select: {
+      id: true,
+      authorId: true,
+    },
+  });
+  if (!isAdmin && postData.authorId !== authorId) {
+    throw new Error("You are not the creator of this post !!!");
+  }
+  return await prisma.post.delete({
+    where: {
+      id: postId,
+    },
+  });
+};
+
+// statistics
+
+const getStats = async () => {
+  return await prisma.$transaction(async (tx) => {
+    const [
+      totalPosts,
+      publishedPost,
+      draftPosts,
+      archivedPosts,
+      totalComments,
+      approvedComments,
+      rejectComments,
+      totalUser,
+      userCount,
+      adminCount,
+      totalViews,
+    ] = await Promise.all([
+      await tx.post.count(),
+      await tx.post.count({
+        where: {
+          status: PostStatus.PUBLISHED,
+        },
+      }),
+      await tx.post.count({
+        where: {
+          status: PostStatus.DRAFT,
+        },
+      }),
+      await tx.post.count({
+        where: {
+          status: PostStatus.ARCHIVED,
+        },
+      }),
+      await tx.comment.count(),
+      await tx.comment.count({ where: { status: Status.APPROVED } }),
+      await tx.comment.count({ where: { status: Status.REJECT } }),
+      await tx.user.count(),
+      await tx.user.count({ where: { role: "USER" } }),
+      await tx.user.count({ where: { role: "ADMIN" } }),
+      await tx.post.aggregate({ _sum: { views: true } }),
+    ]);
+
+    return {
+      totalPosts,
+      publishedPost,
+      draftPosts,
+      archivedPosts,
+      totalComments,
+      approvedComments,
+      rejectComments,
+      totalUser,
+      userCount,
+      adminCount,
+      totalViews: totalViews._sum.views,
+    };
+  });
+};
+
 export const Postservice = {
   createPost,
   getAllPost,
   getPostById,
   getMyPosts,
-  updateMyPost
+  updateMyPost,
+  deletePost,
+  getStats,
 };
