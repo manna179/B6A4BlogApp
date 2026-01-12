@@ -1,11 +1,11 @@
-import e, { Request, Response } from "express";
+import e, { NextFunction, Request, Response } from "express";
 import { Postservice } from "./post.service";
 import { PostStatus } from "../../../generated/prisma/enums";
 import paginationSortingHelper from "../../helpers/paginationSortingHelper";
 import { error } from "node:console";
 import { UserRole } from "../../middlewares/auth";
 
-const createPost = async (req: Request, res: Response) => {
+const createPost = async (req: Request, res: Response,next:NextFunction) => {
   try {
     // console.log(req.user);
     const user = req.user;
@@ -17,10 +17,7 @@ const createPost = async (req: Request, res: Response) => {
     const result = await Postservice.createPost(req.body, user.id as string);
     res.status(201).json(result);
   } catch (e) {
-    res.status(400).json({
-      error: "post creation failed",
-      details: e,
-    });
+    next(e)
   }
 };
 
@@ -116,7 +113,7 @@ const getMyPosts = async (req: Request, res: Response) => {
  *
  */
 
-const updateMyPost = async (req: Request, res: Response) => {
+const updateMyPost = async (req: Request, res: Response,next:NextFunction) => {
   try {
     const user = req.user;
     console.log(user);
@@ -133,13 +130,7 @@ const updateMyPost = async (req: Request, res: Response) => {
     );
     res.status(200).json(result);
   } catch (e) {
-    console.log(e);
-    const errorMessage =
-      e instanceof Error ? e.message : "post update failed !!!";
-    res.status(400).json({
-      error: errorMessage,
-      details: e,
-    });
+  next(e)
   }
 };
 const deletePost = async (req: Request, res: Response) => {
